@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Create Lambda function by using AWS SAM.
+Resources:
+  EndpointFunc:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src
+      Handler: end_point_function.lambda_handler
+      Runtime: python3.9
+      Timeout: 10
+      Environment:
+        Variables:
+          VcRateTableName: !Ref VcRateTable 
+      Events:
+        API:
+          Type: "Api"
+          Properties: 
+            Path: "/api_endpoint"
+            Method: "post"
+      Policies:
+      - AmazonSSMReadOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName: !Ref VcRateTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref UpDownMonitorThresholdTable
+  VcRateTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: VCname
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+  RateDailyUpdate:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src
+      Handler: rate_daily_update.lambda_handler
+      Runtime: python3.9
+      Timeout: 10
+      Environment:
+        Variables:
+          VcRateTableName: !Ref VcRateTable 
+      Events:
+        CheckWebsiteScheduledEvent:
+          Type: Schedule
+          Properties: 
+            Schedule: cron(2 15 * * ? *)
+      Policies:
+      - AmazonSSMReadOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName: !Ref VcRateTable
+  UpDownMonitorThresholdTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: UpDownMonitorThreshold
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+  AutoTrading:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src
+      Handler: auto_trading.lambda_handler
+      Runtime: python3.9
+      Timeout: 10
+      Environment:
+        Variables:
+          VcRateTableName: !Ref VcRateTable
+          UpDownMonitorThresholdTableName: !Ref UpDownMonitorThresholdTable 
+      Events:
+        CheckWebsiteScheduledEvent:
+          Type: Schedule
+          Properties: 
+            Schedule: cron(2 15 * * ? *)
+      Policies:
+      - AmazonSSMReadOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName: !Ref VcRateTable
+      - DynamoDBCrudPolicy:
+          TableName: !Ref UpDownMonitorThresholdTable
+Outputs:
+  ApiEndpointURL:
+    Description: "GMO-VC API Endpoint URL"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${ServerlessRestApi.Stage}/api_endpoint"
